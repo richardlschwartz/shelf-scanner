@@ -168,10 +168,12 @@ RECONCILIATION RULES:
 - If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.
 - If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.
 
-Place coordinates on the PRODUCT AREA (above/behind the tag), not on the tag itself.
-Use stocked products on the same row to calibrate the correct y-coordinate.
-
-The original image is {orig_width} x {orig_height} pixels. All coordinates must be in these dimensions.
+COORDINATE PLACEMENT:
+- The original image is {orig_width} x {orig_height} pixels. All coordinates must be in these dimensions.
+- Place coordinates on the PRODUCT AREA (above/behind the tag), not on the tag itself.
+- To calculate center_x: if a shelf has N tags evenly spaced, and the empty position is tag number P (from left), then center_x ≈ (P - 0.5) / N * {orig_width}. Adjust based on where you actually see the tag in the image.
+- To calculate center_y: look at where stocked products sit on that shelf row and use the same vertical position.
+- IMPORTANT: positions on the RIGHT side of the image must have center_x values in the RIGHT half (> {orig_width // 2}). Positions on the LEFT side must have center_x values in the LEFT half (< {orig_width // 2}).
 
 Respond with ONLY valid JSON:
 {{
