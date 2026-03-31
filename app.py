@@ -155,8 +155,8 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     print("=== END PASS 2 ===")
 
     # ── Pass 3: Reconcile and produce final JSON ──
-    # Restore original working prompt format for reliable detection.
-    # Python will override coordinates after parsing.
+    # Claude reports detection results + tag strip y-coordinates per shelf.
+    # Python calculates all circle coordinates from that data.
     pass3_prompt = (
         "You performed two rounds of tag-by-tag analysis. Now reconcile them.\n\n"
         "ROUND 1 FINDINGS:\n" + pass1_text + "\n\n"
@@ -165,18 +165,25 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
         "- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.\n"
         "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
-        f"The original image is {orig_width} x {orig_height} pixels.\n\n"
+        f"The upscaled image you are viewing is {width} x {height} pixels.\n\n"
+        "IMPORTANT: For the shelves array, look at each shelf's FRONT LIP where the tags are mounted. "
+        "Estimate the y-coordinate (in the upscaled image) of the CENTER of that tag strip. "
+        "This is a horizontal line across the shelf — just estimate its vertical position.\n\n"
         "Respond with ONLY valid JSON:\n"
         "{\n"
-        f'  "image_width": {orig_width},\n'
-        f'  "image_height": {orig_height},\n'
         '  "total_shelves": <int>,\n'
         '  "analysis_notes": "<brief summary>",\n'
+        '  "shelves": [\n'
+        "    {\n"
+        '      "shelf_number": <int, from top>,\n'
+        '      "total_positions": <int, total tags on this shelf>,\n'
+        '      "tag_strip_y": <int, y-coordinate of tag strip center in upscaled image>\n'
+        "    }\n"
+        "  ],\n"
         '  "empty_positions": [\n'
         "    {\n"
         '      "shelf_number": <int, from top>,\n'
         '      "position_from_left": <int, 1-indexed from left>,\n'
-        '      "total_positions_on_shelf": <int, total tags on this shelf>,\n'
         '      "tag_text": "<string or null>",\n'
         '      "confidence": <float 0-1>\n'
         "    }\n"
@@ -211,30 +218,32 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
 
     result = json.loads(json_text.strip())
 
-    # Calculate ALL coordinates in Python from shelf/position data
-    total_shelves = result.get("total_shelves", 6)
+    # Build lookup: shelf_number -> {total_positions, tag_strip_y}
+    scale_factor = orig_width / width  # upscaled -> original
+    shelf_info = {}
+    for s in result.get("shelves", []):
+        sn = s["shelf_number"]
+        shelf_info[sn] = {
+            "total_positions": s.get("total_positions", 6),
+            "tag_strip_y": int(s.get("tag_strip_y", 0) * scale_factor),
+        }
+
     circle_w = max(30, orig_width // 12)
     circle_h = max(25, orig_height // 18)
-
-    # Estimate shelf layout in the image
-    # Shelves typically span from ~3% to ~92% of image height
-    top_margin = int(orig_height * 0.03)
-    bottom_margin = int(orig_height * 0.08)
-    usable_height = orig_height - top_margin - bottom_margin
-    shelf_height = usable_height / total_shelves
+    # How far above the tag strip to center the circle
+    y_offset = max(20, orig_height // 35)
 
     for pos in result.get("empty_positions", []):
-        p = pos.get("position_from_left", 1)
-        n = pos.get("total_positions_on_shelf", 6)
         shelf_num = pos.get("shelf_number", 1)
+        p = pos.get("position_from_left", 1)
+        info = shelf_info.get(shelf_num, {"total_positions": 6, "tag_strip_y": orig_height // 2})
+        n = info["total_positions"]
+        tag_y = info["tag_strip_y"]
 
         # X: evenly space positions across image width
         cx = int((p - 0.5) / n * orig_width)
-
-        # Y: tag strip is at the bottom of each shelf zone
-        # Place circle centered just above the tag strip
-        tag_y = top_margin + shelf_num * shelf_height
-        cy = int(tag_y - shelf_height * 0.25)
+        # Y: place circle just above the tag strip
+        cy = tag_y - y_offset
 
         pos["center_x"] = cx
         pos["center_y"] = cy
