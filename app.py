@@ -213,19 +213,20 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     result = json.loads(json_text.strip())
 
     # Calculate pixel coordinates in original image from Claude's tag positions
-    # Claude reported tag_x, tag_y in the upscaled image; convert to original dimensions
-    scale_factor = orig_width / width  # ratio to convert upscaled coords to original
+    scale_factor = orig_width / width  # upscaled -> original
     circle_w = max(30, orig_width // 12)
     circle_h = max(25, orig_height // 18)
-    # Offset to place circle center ABOVE the tag (product zone)
-    y_offset = orig_height // (result.get("total_shelves", 6) * 2)
+    # Small offset: shift circle just above the tag (~3% of image height)
+    y_offset = max(15, orig_height // 30)
 
     for pos in result.get("empty_positions", []):
-        tag_x = pos.get("tag_x", 0)
         tag_y = pos.get("tag_y", 0)
-        # Convert from upscaled to original image coordinates
-        cx = int(tag_x * scale_factor)
-        cy = int(tag_y * scale_factor) - y_offset  # shift up above the tag
+        # Calculate center_x from position formula (more reliable than Claude's tag_x)
+        p = pos.get("position_from_left", 1)
+        n = pos.get("total_positions_on_shelf", 6)
+        cx = int((p - 0.5) / n * orig_width)
+        # Convert tag_y from upscaled to original, shift up slightly above tag
+        cy = int(tag_y * scale_factor) - y_offset
         pos["center_x"] = cx
         pos["center_y"] = cy
         pos["width"] = circle_w
