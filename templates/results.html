@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results — Shelf Scanner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        /* Header bar */
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #333;
+        }
+        .header h1 {
+            font-size: 1.2rem;
+            color: #fff;
+        }
+        .header .file-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .header .file-name {
+            color: #aaa;
+            font-size: 0.9rem;
+            background: rgba(255,255,255,0.08);
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+        .header .stats {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .stat-badge {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .stat-badge.empty {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+        .stat-badge.shelves {
+            background: rgba(52, 152, 219, 0.2);
+            color: #3498db;
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+        .new-btn {
+            padding: 8px 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+        .new-btn:hover { background: #c0392b; }
+
+        /* Image comparison area */
+        .comparison {
+            display: flex;
+            gap: 2px;
+            padding: 16px;
+            height: calc(100vh - 130px);
+        }
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 10px 16px;
+            background: rgba(0,0,0,0.3);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #888;
+            text-align: center;
+        }
+        .panel-header.annotated {
+            color: #e74c3c;
+        }
+        .panel-body {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 8px;
+        }
+        .panel-body img {
+            max-width: 100%;
+            max-height: calc(100vh - 200px);
+            object-fit: contain;
+            border-radius: 4px;
+        }
+
+        /* Details panel below */
+        .details {
+            padding: 12px 24px;
+            background: rgba(0,0,0,0.3);
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+            font-size: 0.85rem;
+        }
+        .details-section {
+            flex: 1;
+        }
+        .details-section h3 {
+            color: #888;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .details-section p {
+            color: #bbb;
+            line-height: 1.4;
+        }
+        .position-list {
+            list-style: none;
+        }
+        .position-list li {
+            padding: 4px 0;
+            color: #ccc;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .position-list li:last-child { border-bottom: none; }
+        .confidence {
+            color: #888;
+            font-size: 0.8rem;
+        }
+        .tag-text-label {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Shelf Out-of-Stock Scanner</h1>
+        <div class="file-info">
+            <span class="file-name">{{ original_name }}</span>
+            <div class="stats">
+                <span class="stat-badge shelves">{{ analysis.get('total_shelves', '?') }} shelves</span>
+                <span class="stat-badge empty">{{ empty_count }} out of stock</span>
+            </div>
+        </div>
+        <a href="/" class="new-btn">Scan Another</a>
+    </div>
+
+    <div class="comparison">
+        <div class="panel">
+            <div class="panel-header">Original</div>
+            <div class="panel-body">
+                <img src="/uploads/{{ file_id }}.{{ ext }}" alt="Original shelf photo">
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-header annotated">Annotated — {{ empty_count }} Empty Position{{ 's' if empty_count != 1 else '' }}</div>
+            <div class="panel-body">
+                <img src="/results_files/{{ file_id }}_annotated.jpg" alt="Annotated shelf photo">
+            </div>
+        </div>
+    </div>
+
+    <div class="details">
+        <div class="details-section">
+            <h3>Analysis Notes</h3>
+            <p>{{ analysis.get('analysis_notes', 'No notes available.') }}</p>
+        </div>
+        <div class="details-section">
+            <h3>Empty Positions</h3>
+            {% if analysis.get('empty_positions') %}
+            <ul class="position-list">
+                {% for pos in analysis.get('empty_positions', []) %}
+                {% if pos.get('confidence', 0.5) >= 0.4 %}
+                <li>
+                    Shelf {{ pos.shelf_number }}, {{ pos.row }} row, position {{ pos.position_from_left }}
+                    <span class="confidence">({{ (pos.confidence * 100)|int }}%)</span>
+                    {% if pos.tag_text %}
+                    <span class="tag-text-label">{{ pos.tag_text }}</span>
+                    {% endif %}
+                </li>
+                {% endif %}
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>No empty positions detected.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

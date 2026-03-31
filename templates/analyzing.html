@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyzing... — Shelf Scanner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            text-align: center;
+            max-width: 500px;
+            padding: 40px;
+        }
+        h2 {
+            margin-bottom: 12px;
+            color: #fff;
+        }
+        .file-name {
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #333;
+            border-top: 4px solid #e74c3c;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 24px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .status {
+            color: #aaa;
+            font-size: 0.95rem;
+        }
+        .status-detail {
+            color: #666;
+            font-size: 0.85rem;
+            margin-top: 8px;
+        }
+        .error-msg {
+            color: #e74c3c;
+            margin-top: 20px;
+            display: none;
+        }
+        .retry-btn {
+            margin-top: 16px;
+            padding: 10px 24px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner" id="spinner"></div>
+        <h2>Analyzing Shelf Image</h2>
+        <div class="file-name">{{ original_name }}</div>
+        <div class="status" id="statusText">Sending image to Claude Vision API...</div>
+        <div class="status-detail" id="statusDetail">
+            Detecting shelf tags and identifying out-of-stock positions
+        </div>
+        <div class="error-msg" id="errorMsg"></div>
+        <button class="retry-btn" id="retryBtn" onclick="window.location='/'">Try Another Image</button>
+    </div>
+
+    <script>
+        const statusText = document.getElementById('statusText');
+        const statusDetail = document.getElementById('statusDetail');
+        const errorMsg = document.getElementById('errorMsg');
+        const retryBtn = document.getElementById('retryBtn');
+        const spinner = document.getElementById('spinner');
+
+        // Cycle through status messages while waiting
+        const messages = [
+            ['Analyzing shelf structure...', 'Identifying shelf levels and tag strips'],
+            ['Checking perspective geometry...', 'Calibrating camera angle for each shelf level'],
+            ['Detecting shelf tags...', 'Locating product position markers on shelf lips'],
+            ['Comparing tags to products...', 'Identifying tags with no product behind them'],
+            ['Generating annotations...', 'Drawing results on the image'],
+        ];
+        let msgIndex = 0;
+        const msgInterval = setInterval(() => {
+            msgIndex = (msgIndex + 1) % messages.length;
+            statusText.textContent = messages[msgIndex][0];
+            statusDetail.textContent = messages[msgIndex][1];
+        }, 4000);
+
+        // Call the analysis endpoint
+        fetch('/analyze/{{ file_id }}/{{ ext }}/{{ original_name }}')
+            .then(r => r.json())
+            .then(data => {
+                clearInterval(msgInterval);
+                if (data.success) {
+                    window.location = data.redirect;
+                } else {
+                    spinner.style.display = 'none';
+                    statusText.textContent = 'Analysis failed';
+                    statusDetail.textContent = '';
+                    errorMsg.textContent = data.error || 'Unknown error';
+                    errorMsg.style.display = 'block';
+                    retryBtn.style.display = 'inline-block';
+                }
+            })
+            .catch(err => {
+                clearInterval(msgInterval);
+                spinner.style.display = 'none';
+                statusText.textContent = 'Analysis failed';
+                statusDetail.textContent = '';
+                errorMsg.textContent = err.message;
+                errorMsg.style.display = 'block';
+                retryBtn.style.display = 'inline-block';
+            });
+    </script>
+</body>
+</html>
