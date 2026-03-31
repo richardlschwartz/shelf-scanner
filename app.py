@@ -254,10 +254,9 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
         "- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.\n"
         "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
-        "For each empty position, also estimate where the shelf tag is located horizontally.\n"
-        "Look at the tag on the shelf lip and estimate its horizontal position as a fraction\n"
-        "from 0.0 (left edge of the shelf/fixture) to 1.0 (right edge of the shelf/fixture).\n"
-        "For example, if a tag is roughly 3/4 of the way across, use 0.75.\n\n"
+        "For each empty position, estimate the pixel x-coordinate of the CENTER of that shelf tag\n"
+        "in this image. The image is " + str(width) + " pixels wide (0 = left edge, " + str(width) + " = right edge).\n"
+        "Look carefully at each tag on the shelf lip and estimate its center x in pixels.\n\n"
         "Respond with ONLY valid JSON:\n"
         "{\n"
         '  "total_shelves": <int>,\n'
@@ -267,7 +266,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         '      "shelf_number": <int, from top>,\n'
         '      "position_from_left": <int, 1-indexed from left>,\n'
         '      "total_positions_on_shelf": <int, total tags on this shelf>,\n'
-        '      "tag_fraction_x": <float 0-1, horizontal position of the tag from left edge>,\n'
+        '      "tag_pixel_x": <int, estimated x-coordinate in pixels of the tag center>,\n'
         '      "tag_text": "<string or null>",\n'
         '      "confidence": <float 0-1>\n'
         "    }\n"
@@ -317,10 +316,11 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         p = pos.get("position_from_left", 1)
         n = pos.get("total_positions_on_shelf", 6)
 
-        # X: use Claude's tag_fraction_x if available, else formula
-        frac = pos.get("tag_fraction_x")
-        if frac is not None:
-            cx = int(fixture_left + frac * fixture_width)
+        # X: use Claude's tag_pixel_x (in upscaled coords) if available, else formula
+        tag_px = pos.get("tag_pixel_x")
+        if tag_px is not None:
+            # Convert from upscaled image coords to original image coords
+            cx = int(tag_px / scale)
         else:
             cx = int(fixture_left + (p - 0.5) / n * fixture_width)
 
@@ -339,7 +339,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         pos["width"] = circle_w
         pos["height"] = circle_h
 
-        print(f"Shelf {shelf_num} pos {p}/{n}: cx={cx}, cy={cy} (zone {zone_top}-{zone_bottom})")
+        print(f"Shelf {shelf_num} pos {p}/{n}: tag_pixel_x={pos.get('tag_pixel_x')} scale={scale:.2f} cx={cx}, cy={cy}")
 
     result["image_width"] = orig_width
     result["image_height"] = orig_height
