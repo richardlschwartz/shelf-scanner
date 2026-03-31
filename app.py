@@ -116,6 +116,9 @@ Be precise. List every tag and its status (STOCKED or EMPTY) for every shelf."""
         ],
     )
     pass1_text = pass1_response.content[0].text
+    print("=== PASS 1 ===")
+    print(pass1_text)
+    print("=== END PASS 1 ===")
 
     # ── Pass 2: Verify with tag-first method ──
     pass2_prompt = """Now verify your analysis. Go back through EACH shelf and re-check using the tag-first method:
@@ -147,6 +150,9 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         ],
     )
     pass2_text = pass2_response.content[0].text
+    print("=== PASS 2 ===")
+    print(pass2_text)
+    print("=== END PASS 2 ===")
 
     # ── Pass 3: Reconcile and produce final coordinates ──
     pass3_prompt = f"""You performed two rounds of tag-by-tag analysis. Now reconcile them.
@@ -202,6 +208,9 @@ Respond with ONLY valid JSON:
     )
 
     response_text = pass3_response.content[0].text
+    print("=== PASS 3 (JSON) ===")
+    print(response_text)
+    print("=== END PASS 3 ===")
 
     # Try to parse JSON, handling potential markdown code blocks
     json_text = response_text
