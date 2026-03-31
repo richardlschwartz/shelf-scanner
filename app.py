@@ -217,6 +217,7 @@ For each shelf, look at the front lip. Find each tag. Then look DIRECTLY BEHIND 
 
 COMMON MISTAKES TO AVOID:
 - Miscounting shelves: Make sure you counted every shelf that has tags on its lip. The lowest shelf with tags is still a shelf, even if it has few products.
+- OVERCOUNTING TAGS: Only count actual shelf tags (small printed price/product labels on the shelf lip). Do NOT count shelf hardware, dividers, edge caps, or decorative elements as tags. Count precisely — do not say "approximately". If unsure, use the lower count.
 - Missing edge positions: Check the last 1-2 tags on the right edge of each shelf, and the first 1-2 tags on the left edge of each shelf.
 - Confusing perspective for emptiness: On lower shelves, more bare surface is visible in front of products. That's normal. Focus on whether a product EXISTS behind the tag, not how much shelf surface you see.
 - Confusing emptiness for perspective: If a tag has NO product behind it at all (just flat shelf or back wall) while neighboring tags on the same shelf DO have products, that is a genuine empty.
@@ -252,13 +253,10 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "ROUND 2 FINDINGS:\n" + pass2_text + "\n\n"
         "RECONCILIATION RULES:\n"
         "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
-        "- If the tag count differs between rounds for a shelf, look at the shelf again and count the actual tags visible on the lip. Do not assume higher is better — overcounting is as bad as undercounting.\n"
+        "- If the tag count differs between rounds for a shelf, look at the shelf again and count ONLY actual printed price/product tags on the lip. Do not count shelf hardware, dividers, or edge caps. Use the LOWER count if unsure.\n"
         "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
-        "For each empty position, estimate the pixel x-coordinate of the CENTER of that shelf tag\n"
-        "in this image. The image is " + str(width) + " pixels wide (0 = left edge, " + str(width) + " = right edge).\n"
-        "IMPORTANT: Do NOT round to the nearest 50 or 100. Look at the actual tag label on the shelf lip\n"
-        "and estimate precisely where its center falls. Tags are NOT evenly spaced — perspective makes\n"
-        "them appear closer together on one side. Estimate each tag independently.\n\n"
+        "CRITICAL: Count tags precisely. Only count small printed labels (price tags / product tags) on the shelf lip. "
+        "Do NOT count shelf dividers, edge hardware, bracket covers, or any non-tag elements.\n\n"
         "Respond with ONLY valid JSON:\n"
         "{\n"
         '  "total_shelves": <int>,\n'
@@ -268,7 +266,6 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         '      "shelf_number": <int, from top>,\n'
         '      "position_from_left": <int, 1-indexed from left>,\n'
         '      "total_positions_on_shelf": <int, total tags on this shelf>,\n'
-        '      "tag_pixel_x": <int, estimated x-coordinate in pixels of the tag center>,\n'
         '      "tag_text": "<string or null>",\n'
         '      "confidence": <float 0-1>\n'
         "    }\n"
@@ -318,13 +315,9 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         p = pos.get("position_from_left", 1)
         n = pos.get("total_positions_on_shelf", 6)
 
-        # X: use Claude's tag_pixel_x (in upscaled coords) if available, else formula
-        tag_px = pos.get("tag_pixel_x")
-        if tag_px is not None:
-            # Convert from upscaled image coords to original image coords
-            cx = int(tag_px / scale)
-        else:
-            cx = int(fixture_left + (p - 0.5) / n * fixture_width)
+        # X: distribute positions evenly across the fixture width
+        cx = int(fixture_left + (p - 0.5) / n * fixture_width)
+        print(f"Shelf {shelf_num} pos {p}/{n}: cx={cx} (tag_pixel_x={pos.get('tag_pixel_x')})")
 
         # Y: midpoint of the product zone, shifted slightly toward the bottom
         # (products sit on the shelf surface, closer to the tag strip)
@@ -340,29 +333,6 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         pos["center_y"] = cy
         pos["width"] = circle_w
         pos["height"] = circle_h
-
-        print(f"Shelf {shelf_num} pos {p}/{n}: tag_pixel_x={pos.get('tag_pixel_x')} scale={scale:.2f} cx={cx}, cy={cy}")
-
-    # Enforce minimum spacing: if circles on the same shelf are too close, spread them apart
-    min_gap = circle_w + 10  # circles should not overlap
-    empty_positions = result.get("empty_positions", [])
-    # Group by shelf
-    shelves_map = {}
-    for pos in empty_positions:
-        s = pos.get("shelf_number", 0)
-        shelves_map.setdefault(s, []).append(pos)
-    for s, positions in shelves_map.items():
-        if len(positions) < 2:
-            continue
-        positions.sort(key=lambda p: p["center_x"])
-        for i in range(1, len(positions)):
-            gap = positions[i]["center_x"] - positions[i-1]["center_x"]
-            if gap < min_gap:
-                # Spread apart symmetrically around the midpoint
-                mid = (positions[i-1]["center_x"] + positions[i]["center_x"]) // 2
-                positions[i-1]["center_x"] = mid - min_gap // 2
-                positions[i]["center_x"] = mid + min_gap // 2
-                print(f"Shelf {s}: spread circles apart, gap was {gap}px, now {min_gap}px")
 
     result["image_width"] = orig_width
     result["image_height"] = orig_height
