@@ -155,46 +155,43 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     print("=== END PASS 2 ===")
 
     # ── Pass 3: Reconcile and produce final coordinates ──
-    pass3_prompt = f"""You performed two rounds of tag-by-tag analysis. Now reconcile them.
-
-ROUND 1 FINDINGS:
-{pass1_text}
-
-ROUND 2 FINDINGS:
-{pass2_text}
-
-RECONCILIATION RULES:
-- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.
-- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.
-- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.
-
-COORDINATE PLACEMENT:
-- The original image is {orig_width} x {orig_height} pixels. All coordinates must be in these dimensions.
-- Place coordinates on the PRODUCT AREA (above/behind the tag), not on the tag itself.
-- To calculate center_x: if a shelf has N tags evenly spaced, and the empty position is tag number P (from left), then center_x ≈ (P - 0.5) / N * {orig_width}. Adjust based on where you actually see the tag in the image.
-- To calculate center_y: look at where stocked products sit on that shelf row and use the same vertical position.
-- IMPORTANT: positions on the RIGHT side of the image must have center_x values in the RIGHT half (> {orig_width // 2}). Positions on the LEFT side must have center_x values in the LEFT half (< {orig_width // 2}).
-
-Respond with ONLY valid JSON:
-{{
-  "image_width": {orig_width},
-  "image_height": {orig_height},
-  "total_shelves": <int>,
-  "analysis_notes": "<brief summary>",
-  "empty_positions": [
-    {{
-      "center_x": <int>,
-      "center_y": <int>,
-      "width": <int>,
-      "height": <int>,
-      "shelf_number": <int, from top>,
-      "row": "front",
-      "position_from_left": <int>,
-      "tag_text": "<string or null>",
-      "confidence": <float 0-1>
-    }}
-  ]
-}}"""
+    # Build prompt without f-string to avoid crashes when pass1/pass2 text contains braces
+    half_width = orig_width // 2
+    pass3_prompt = (
+        "You performed two rounds of tag-by-tag analysis. Now reconcile them.\n\n"
+        "ROUND 1 FINDINGS:\n" + pass1_text + "\n\n"
+        "ROUND 2 FINDINGS:\n" + pass2_text + "\n\n"
+        "RECONCILIATION RULES:\n"
+        "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
+        "- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.\n"
+        "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
+        f"COORDINATE PLACEMENT:\n"
+        f"- The original image is {orig_width} x {orig_height} pixels. All coordinates must be in these dimensions.\n"
+        f"- Place coordinates on the PRODUCT AREA (above/behind the tag), not on the tag itself.\n"
+        f"- To calculate center_x: if a shelf has N tags evenly spaced, and the empty position is tag number P (from left), then center_x ≈ (P - 0.5) / N * {orig_width}. Adjust based on where you actually see the tag in the image.\n"
+        f"- To calculate center_y: look at where stocked products sit on that shelf row and use the same vertical position.\n"
+        f"- IMPORTANT: positions on the RIGHT side of the image must have center_x values in the RIGHT half (> {half_width}). Positions on the LEFT side must have center_x values in the LEFT half (< {half_width}).\n\n"
+        "Respond with ONLY valid JSON:\n"
+        "{\n"
+        f'  "image_width": {orig_width},\n'
+        f'  "image_height": {orig_height},\n'
+        '  "total_shelves": <int>,\n'
+        '  "analysis_notes": "<brief summary>",\n'
+        '  "empty_positions": [\n'
+        "    {\n"
+        '      "center_x": <int>,\n'
+        '      "center_y": <int>,\n'
+        '      "width": <int>,\n'
+        '      "height": <int>,\n'
+        '      "shelf_number": <int, from top>,\n'
+        '      "row": "front",\n'
+        '      "position_from_left": <int>,\n'
+        '      "tag_text": "<string or null>",\n'
+        '      "confidence": <float 0-1>\n'
+        "    }\n"
+        "  ]\n"
+        "}"
+    )
 
     pass3_response = client.messages.create(
         model="claude-opus-4-20250514",
@@ -385,6 +382,8 @@ def analyze(file_id, ext, original_name):
         })
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
