@@ -2,4 +2,4 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "gunicorn app:app"
+startCommand = "gunicorn app:app --timeout 300"
