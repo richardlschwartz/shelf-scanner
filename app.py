@@ -105,13 +105,12 @@ TAG-FIRST METHOD — for each shelf (numbered 1 from top):
 
 PERSPECTIVE NOTE: On lower shelves you see more shelf surface due to the downward camera angle. This is normal. The key distinction is: is there a PRODUCT rising up from the shelf behind this tag, or just flat surface? Compare left-right along the same shelf row.
 
-CRITICAL — BOTTOM SHELF CHECK: The lowest shelf with tags is the one most often mis-analyzed. For EVERY tag on this shelf, compare what you see behind it to what you see behind a clearly STOCKED tag on the SAME shelf. If the stocked tags have product boxes/items rising up but some tags (especially on the left or right edge) show only bare flat shelf surface with no product, those positions are EMPTY. Do not dismiss these as "perspective" — if neighboring tags on the same shelf have visible products and these do not, they are genuinely empty.
-
-Be precise. List every tag and its status (STOCKED or EMPTY) for every shelf."""
+Be precise. List every tag and its status (STOCKED or EMPTY) for every shelf. Only mark a position EMPTY when you are confident there is NO product behind that tag — do not guess."""
 
     pass1_response = client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=4096,
+        temperature=0,
         messages=[
             {"role": "user", "content": [image_block, {"type": "text", "text": pass1_prompt}]},
         ],
@@ -140,6 +139,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     pass2_response = client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=4096,
+        temperature=0,
         messages=[
             {"role": "user", "content": [image_block, {"type": "text", "text": pass1_prompt}]},
             {"role": "assistant", "content": pass1_text},
@@ -161,8 +161,6 @@ RECONCILIATION RULES:
 - If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.
 - If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.
 - If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.
-
-MANDATORY BOTTOM SHELF RE-CHECK: Before finalizing, look at the LOWEST shelf with tags one more time. For each tag on this shelf, compare what is behind it to what is behind a clearly stocked tag on the same shelf. If any tag has no product rising up behind it while others do, mark it EMPTY regardless of what the rounds said.
 
 Place coordinates on the PRODUCT AREA (above/behind the tag), not on the tag itself.
 Use stocked products on the same row to calibrate the correct y-coordinate.
@@ -193,6 +191,7 @@ Respond with ONLY valid JSON:
     pass3_response = client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=4096,
+        temperature=0,
         messages=[
             {"role": "user", "content": [image_block, {"type": "text", "text": pass1_prompt}]},
             {"role": "assistant", "content": pass1_text},
