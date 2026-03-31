@@ -52,6 +52,34 @@ def get_media_type(filename):
     }[ext]
 
 
+def detect_fixture_bounds(image_path):
+    """Detect the horizontal extent of the fixture (left and right edges)."""
+    img = Image.open(image_path).convert('L')
+    arr = np.array(img, dtype=np.float32)
+    h, w = arr.shape
+
+    hgrad = np.diff(arr, axis=1)
+    top, bot = int(h * 0.2), int(h * 0.8)
+    col_grad = np.mean(np.abs(hgrad[top:bot, :]), axis=0)
+    kernel = np.ones(3) / 3
+    smoothed = np.convolve(col_grad, kernel, mode='same')
+
+    threshold = np.mean(smoothed) + np.std(smoothed)
+    left_x = 0
+    for i in range(len(smoothed)):
+        if smoothed[i] > threshold:
+            left_x = i
+            break
+    right_x = w - 1
+    for i in range(len(smoothed) - 1, -1, -1):
+        if smoothed[i] > threshold:
+            right_x = i
+            break
+
+    print(f"Fixture bounds: x={left_x} to x={right_x} (width={right_x - left_x})")
+    return left_x, right_x
+
+
 def detect_shelf_edges(image_path, num_shelves):
     """
     Detect horizontal shelf edges in the image using gradient analysis.
@@ -269,10 +297,11 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
 
     result = json.loads(json_text.strip())
 
-    # Detect shelf boundaries from the image
-    # Returns num_shelves + 1 boundaries: [top_of_shelf_1, bottom_of_shelf_1, ..., bottom_of_shelf_N]
+    # Detect shelf boundaries and fixture horizontal extent
     total_shelves = result.get("total_shelves", 6)
     boundaries = detect_shelf_edges(image_path, total_shelves)
+    fixture_left, fixture_right = detect_fixture_bounds(image_path)
+    fixture_width = fixture_right - fixture_left
 
     circle_w = max(30, orig_width // 12)
     circle_h = max(25, orig_height // 18)
@@ -283,14 +312,16 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         p = pos.get("position_from_left", 1)
         n = pos.get("total_positions_on_shelf", 6)
 
-        # X: evenly space positions across image width
-        cx = int((p - 0.5) / n * orig_width)
+        # X: distribute within fixture bounds (not full image width)
+        cx = int(fixture_left + (p - 0.5) / n * fixture_width)
 
-        # Y: midpoint of the product zone for this shelf
+        # Y: midpoint of the product zone, shifted slightly toward the bottom
+        # (products sit on the shelf surface, closer to the tag strip)
         if shelf_num < len(boundaries):
             zone_top = boundaries[shelf_num - 1]
             zone_bottom = boundaries[shelf_num]
-            cy = int((zone_top + zone_bottom) / 2)
+            # Place circle at 60% down the zone (closer to tag strip than zone top)
+            cy = int(zone_top + (zone_bottom - zone_top) * 0.6)
         else:
             cy = int(orig_height * shelf_num / (total_shelves + 1))
 
