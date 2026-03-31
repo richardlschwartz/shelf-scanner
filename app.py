@@ -252,7 +252,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "ROUND 2 FINDINGS:\n" + pass2_text + "\n\n"
         "RECONCILIATION RULES:\n"
         "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
-        "- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.\n"
+        "- If the tag count differs between rounds for a shelf, look at the shelf again and count the actual tags visible on the lip. Do not assume higher is better — overcounting is as bad as undercounting.\n"
         "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
         "For each empty position, estimate the pixel x-coordinate of the CENTER of that shelf tag\n"
         "in this image. The image is " + str(width) + " pixels wide (0 = left edge, " + str(width) + " = right edge).\n"
