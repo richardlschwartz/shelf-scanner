@@ -154,8 +154,9 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     print(pass2_text)
     print("=== END PASS 2 ===")
 
-    # ── Pass 3: Reconcile and produce final structured data ──
-    # Claude reports shelf/position info; Python calculates pixel coordinates
+    # ── Pass 3: Reconcile and produce final JSON ──
+    # Restore original working prompt format for reliable detection.
+    # Python will override coordinates after parsing.
     pass3_prompt = (
         "You performed two rounds of tag-by-tag analysis. Now reconcile them.\n\n"
         "ROUND 1 FINDINGS:\n" + pass1_text + "\n\n"
@@ -164,20 +165,18 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
         "- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.\n"
         "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
-        f"The UPSCALED image you are viewing is {width} x {height} pixels.\n\n"
-        "For each empty position, report the shelf info AND the approximate pixel location of its SHELF TAG in the upscaled image.\n"
-        "Look at where the tag physically is in the image and estimate its x,y center coordinates.\n\n"
+        f"The original image is {orig_width} x {orig_height} pixels.\n\n"
         "Respond with ONLY valid JSON:\n"
         "{\n"
+        f'  "image_width": {orig_width},\n'
+        f'  "image_height": {orig_height},\n'
         '  "total_shelves": <int>,\n'
         '  "analysis_notes": "<brief summary>",\n'
         '  "empty_positions": [\n'
         "    {\n"
         '      "shelf_number": <int, from top>,\n'
-        '      "position_from_left": <int>,\n'
-        '      "total_positions_on_shelf": <int>,\n'
-        '      "tag_x": <int, approximate x center of the tag in the upscaled image>,\n'
-        '      "tag_y": <int, approximate y center of the tag in the upscaled image>,\n'
+        '      "position_from_left": <int, 1-indexed from left>,\n'
+        '      "total_positions_on_shelf": <int, total tags on this shelf>,\n'
         '      "tag_text": "<string or null>",\n'
         '      "confidence": <float 0-1>\n'
         "    }\n"
@@ -212,21 +211,31 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
 
     result = json.loads(json_text.strip())
 
-    # Calculate pixel coordinates in original image from Claude's tag positions
-    scale_factor = orig_width / width  # upscaled -> original
+    # Calculate ALL coordinates in Python from shelf/position data
+    total_shelves = result.get("total_shelves", 6)
     circle_w = max(30, orig_width // 12)
     circle_h = max(25, orig_height // 18)
-    # Small offset: shift circle just above the tag (~3% of image height)
-    y_offset = max(15, orig_height // 30)
+
+    # Estimate shelf layout in the image
+    # Shelves typically span from ~3% to ~92% of image height
+    top_margin = int(orig_height * 0.03)
+    bottom_margin = int(orig_height * 0.08)
+    usable_height = orig_height - top_margin - bottom_margin
+    shelf_height = usable_height / total_shelves
 
     for pos in result.get("empty_positions", []):
-        tag_y = pos.get("tag_y", 0)
-        # Calculate center_x from position formula (more reliable than Claude's tag_x)
         p = pos.get("position_from_left", 1)
         n = pos.get("total_positions_on_shelf", 6)
+        shelf_num = pos.get("shelf_number", 1)
+
+        # X: evenly space positions across image width
         cx = int((p - 0.5) / n * orig_width)
-        # Convert tag_y from upscaled to original, shift up slightly above tag
-        cy = int(tag_y * scale_factor) - y_offset
+
+        # Y: tag strip is at the bottom of each shelf zone
+        # Place circle centered just above the tag strip
+        tag_y = top_margin + shelf_num * shelf_height
+        cy = int(tag_y - shelf_height * 0.25)
+
         pos["center_x"] = cx
         pos["center_y"] = cy
         pos["width"] = circle_w
