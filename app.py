@@ -169,7 +169,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         f"- The original image is {orig_width} x {orig_height} pixels. All coordinates must be in these dimensions.\n"
         f"- Place coordinates on the PRODUCT AREA (above/behind the tag), not on the tag itself.\n"
         f"- To calculate center_x: if a shelf has N tags evenly spaced, and the empty position is tag number P (from left), then center_x ≈ (P - 0.5) / N * {orig_width}. Adjust based on where you actually see the tag in the image.\n"
-        f"- To calculate center_y: look at where stocked products sit on that shelf row and use the same vertical position.\n"
+        f"- To calculate center_y: find the vertical midpoint between the tag strip on that shelf's front lip and the shelf surface above it (or the top of the products on that shelf). The circle should be centered on the product zone, NOT on or below the tag strip. For lower shelves, the product zone is ABOVE the tags, so center_y should be noticeably ABOVE the tag strip y-coordinate.\n"
         f"- IMPORTANT: positions on the RIGHT side of the image must have center_x values in the RIGHT half (> {half_width}). Positions on the LEFT side must have center_x values in the LEFT half (< {half_width}).\n\n"
         "Respond with ONLY valid JSON:\n"
         "{\n"
