@@ -14,6 +14,7 @@ import uuid
 from io import BytesIO
 from pathlib import Path
 
+import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify
 from PIL import Image, ImageDraw, ImageFont
 import anthropic
@@ -49,6 +50,67 @@ def get_media_type(filename):
         "png": "image/png",
         "webp": "image/webp",
     }[ext]
+
+
+def detect_shelf_edges(image_path, num_shelves):
+    """
+    Detect horizontal shelf edges in the image using gradient analysis.
+    Returns a list of y-coordinates for each shelf's tag strip, from top to bottom.
+    """
+    img = Image.open(image_path).convert('L')
+    arr = np.array(img, dtype=np.float32)
+    h, w = arr.shape
+
+    # Vertical gradient — strong edges are shelf lips/tag strips
+    grad = np.diff(arr, axis=0)
+    left, right = int(w * 0.1), int(w * 0.9)
+    row_grad = np.mean(np.abs(grad[:, left:right]), axis=1)
+
+    # Smooth the gradient
+    kernel = np.ones(5) / 5
+    smoothed = np.convolve(row_grad, kernel, mode='same')
+
+    # Find ALL peaks (local maxima)
+    peaks = []
+    for i in range(2, len(smoothed) - 2):
+        if smoothed[i] > np.mean(smoothed) and smoothed[i] >= smoothed[i-1] and smoothed[i] >= smoothed[i+1]:
+            peaks.append((i, smoothed[i]))
+
+    # We need num_shelves + 1 boundary edges:
+    # edge[0] = top of shelf 1 (header/fixture boundary)
+    # edge[1] = bottom of shelf 1 / top of shelf 2
+    # ...
+    # edge[num_shelves] = bottom of last shelf
+    num_boundaries = num_shelves + 1
+
+    # Boundaries span from ~8% (header top) to ~92% of image height
+    zone_start = int(h * 0.08)
+    zone_end = int(h * 0.92)
+    zone_height = (zone_end - zone_start) / num_boundaries
+
+    edge_ys = []
+    for z in range(num_boundaries):
+        z_top = zone_start + z * zone_height
+        z_bottom = zone_start + (z + 1) * zone_height
+        zone_peaks = [(y, s) for y, s in peaks if z_top <= y < z_bottom]
+        if zone_peaks:
+            best_y, _ = max(zone_peaks, key=lambda x: x[1])
+            edge_ys.append(best_y)
+        else:
+            edge_ys.append(int((z_top + z_bottom) / 2))
+
+    # Enforce minimum spacing: if two boundaries are too close,
+    # replace the weaker one with the zone midpoint
+    min_spacing = (zone_end - zone_start) / (num_boundaries * 2)
+    for i in range(1, len(edge_ys)):
+        if edge_ys[i] - edge_ys[i-1] < min_spacing:
+            # Replace this edge with the zone midpoint
+            z_top = zone_start + i * zone_height
+            z_bottom = zone_start + (i + 1) * zone_height
+            edge_ys[i] = int((z_top + z_bottom) / 2)
+
+    print(f"Detected shelf boundaries ({num_boundaries}): {edge_ys}")
+    return edge_ys
 
 
 def analyze_shelf_image(image_path, filename):
@@ -155,8 +217,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     print("=== END PASS 2 ===")
 
     # ── Pass 3: Reconcile and produce final JSON ──
-    # Claude reports detection results + tag strip y-coordinates per shelf.
-    # Python calculates all circle coordinates from that data.
+    # Claude only reports detection data. Python handles all coordinate placement.
     pass3_prompt = (
         "You performed two rounds of tag-by-tag analysis. Now reconcile them.\n\n"
         "ROUND 1 FINDINGS:\n" + pass1_text + "\n\n"
@@ -165,25 +226,15 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "- If a position was marked EMPTY in EITHER round and the other round did not explicitly mark it STOCKED with clear justification, include it as empty.\n"
         "- If the tag count differs between rounds for a shelf, use the HIGHER count — it is easier to undercount tags than to hallucinate them.\n"
         "- If one round found MORE empty positions on a shelf than the other, re-examine that shelf in the image to determine the correct count.\n\n"
-        f"The upscaled image you are viewing is {width} x {height} pixels.\n\n"
-        "IMPORTANT: For the shelves array, look at each shelf's FRONT LIP where the tags are mounted. "
-        "Estimate the y-coordinate (in the upscaled image) of the CENTER of that tag strip. "
-        "This is a horizontal line across the shelf — just estimate its vertical position.\n\n"
         "Respond with ONLY valid JSON:\n"
         "{\n"
         '  "total_shelves": <int>,\n'
         '  "analysis_notes": "<brief summary>",\n'
-        '  "shelves": [\n'
-        "    {\n"
-        '      "shelf_number": <int, from top>,\n'
-        '      "total_positions": <int, total tags on this shelf>,\n'
-        '      "tag_strip_y": <int, y-coordinate of tag strip center in upscaled image>\n'
-        "    }\n"
-        "  ],\n"
         '  "empty_positions": [\n'
         "    {\n"
         '      "shelf_number": <int, from top>,\n'
         '      "position_from_left": <int, 1-indexed from left>,\n'
+        '      "total_positions_on_shelf": <int, total tags on this shelf>,\n'
         '      "tag_text": "<string or null>",\n'
         '      "confidence": <float 0-1>\n'
         "    }\n"
@@ -218,37 +269,37 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
 
     result = json.loads(json_text.strip())
 
-    # Build lookup: shelf_number -> {total_positions, tag_strip_y}
-    scale_factor = orig_width / width  # upscaled -> original
-    shelf_info = {}
-    for s in result.get("shelves", []):
-        sn = s["shelf_number"]
-        shelf_info[sn] = {
-            "total_positions": s.get("total_positions", 6),
-            "tag_strip_y": int(s.get("tag_strip_y", 0) * scale_factor),
-        }
+    # Detect shelf boundaries from the image
+    # Returns num_shelves + 1 boundaries: [top_of_shelf_1, bottom_of_shelf_1, ..., bottom_of_shelf_N]
+    total_shelves = result.get("total_shelves", 6)
+    boundaries = detect_shelf_edges(image_path, total_shelves)
 
     circle_w = max(30, orig_width // 12)
     circle_h = max(25, orig_height // 18)
-    # How far above the tag strip to center the circle
-    y_offset = max(20, orig_height // 35)
 
+    # For shelf N (1-indexed): product zone is between boundaries[N-1] and boundaries[N]
     for pos in result.get("empty_positions", []):
         shelf_num = pos.get("shelf_number", 1)
         p = pos.get("position_from_left", 1)
-        info = shelf_info.get(shelf_num, {"total_positions": 6, "tag_strip_y": orig_height // 2})
-        n = info["total_positions"]
-        tag_y = info["tag_strip_y"]
+        n = pos.get("total_positions_on_shelf", 6)
 
         # X: evenly space positions across image width
         cx = int((p - 0.5) / n * orig_width)
-        # Y: place circle just above the tag strip
-        cy = tag_y - y_offset
+
+        # Y: midpoint of the product zone for this shelf
+        if shelf_num < len(boundaries):
+            zone_top = boundaries[shelf_num - 1]
+            zone_bottom = boundaries[shelf_num]
+            cy = int((zone_top + zone_bottom) / 2)
+        else:
+            cy = int(orig_height * shelf_num / (total_shelves + 1))
 
         pos["center_x"] = cx
         pos["center_y"] = cy
         pos["width"] = circle_w
         pos["height"] = circle_h
+
+        print(f"Shelf {shelf_num} pos {p}/{n}: cx={cx}, cy={cy} (zone {zone_top}-{zone_bottom})")
 
     result["image_width"] = orig_width
     result["image_height"] = orig_height
