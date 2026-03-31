@@ -261,6 +261,7 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
         "{\n"
         '  "total_shelves": <int>,\n'
         '  "analysis_notes": "<brief summary>",\n'
+        '  "shelf_tag_counts": [<int>, <int>, ...],  // tag count for each shelf, top to bottom\n'
         '  "empty_positions": [\n'
         "    {\n"
         '      "shelf_number": <int, from top>,\n'
@@ -309,15 +310,34 @@ List your revised tag-by-tag assessment for each shelf. Only change your previou
     circle_w = max(30, orig_width // 12)
     circle_h = max(25, orig_height // 18)
 
+    # Cross-validate tag counts: use the mode across all shelves
+    tag_counts = result.get("shelf_tag_counts", [])
+    mode_count = None
+    if tag_counts:
+        from collections import Counter
+        count_freq = Counter(tag_counts)
+        mode_count = count_freq.most_common(1)[0][0]
+        print(f"Tag counts per shelf: {tag_counts}, mode={mode_count}")
+
     # For shelf N (1-indexed): product zone is between boundaries[N-1] and boundaries[N]
     for pos in result.get("empty_positions", []):
         shelf_num = pos.get("shelf_number", 1)
         p = pos.get("position_from_left", 1)
         n = pos.get("total_positions_on_shelf", 6)
 
+        # If this shelf's count differs from the mode by exactly 1, use the mode
+        # (Claude tends to overcount by including shelf hardware as tags)
+        if mode_count and n != mode_count and abs(n - mode_count) == 1:
+            old_n = n
+            n = mode_count
+            # Adjust position if we reduced the count and position was near the end
+            if n < old_n and p > n:
+                p = n  # cap at new max
+            print(f"Shelf {shelf_num}: adjusted tag count {old_n} -> {n} (mode={mode_count})")
+
         # X: distribute positions evenly across the fixture width
         cx = int(fixture_left + (p - 0.5) / n * fixture_width)
-        print(f"Shelf {shelf_num} pos {p}/{n}: cx={cx} (tag_pixel_x={pos.get('tag_pixel_x')})")
+        print(f"Shelf {shelf_num} pos {p}/{n}: cx={cx}")
 
         # Y: midpoint of the product zone, shifted slightly toward the bottom
         # (products sit on the shelf surface, closer to the tag strip)
