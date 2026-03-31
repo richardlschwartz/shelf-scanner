@@ -105,7 +105,7 @@ TAG-FIRST METHOD — for each shelf (numbered 1 from top):
 
 PERSPECTIVE NOTE: On lower shelves you see more shelf surface due to the downward camera angle. This is normal. The key distinction is: is there a PRODUCT rising up from the shelf behind this tag, or just flat surface? Compare left-right along the same shelf row.
 
-Be precise. List every tag and its status (STOCKED or EMPTY) for every shelf. Only mark a position EMPTY when you are confident there is NO product behind that tag — do not guess."""
+Be precise. List every tag and its status (STOCKED or EMPTY) for every shelf."""
 
     pass1_response = client.messages.create(
         model="claude-opus-4-20250514",
